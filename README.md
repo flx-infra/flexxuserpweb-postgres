@@ -5,7 +5,7 @@ Opción 1 de la pizarra «Despliegue Flexxus Order»: la celda corre dentro del 
 ## Despliegue actual
 
 - Swarm de 10.250.0.98, stack `flexxuserpweb-postgres` en Portainer, desplegado desde este repo (rama `main`) con actualización automática cada 5 minutos: un push a `main` se aplica solo.
-- pgAdmin y otras herramientas: `10.250.0.98:15432` (primario) y `:15433` (réplicas).
+- pgAdmin y otras herramientas: `10.250.0.98:15432` (primario) y `:15433` (réplicas). PgBouncer: `10.250.0.98:16432`.
 - Configs `celda01_*_v1` y secrets creados aparte en Portainer: no están en el repo.
 
 ## Qué levanta

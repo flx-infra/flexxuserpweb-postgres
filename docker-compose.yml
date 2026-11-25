@@ -84,6 +84,8 @@ services:
       - >-
         printf '"pgbouncer_auth" "%s"\n' "$$(cat /run/secrets/pgbouncer_auth_password)" > /etc/pgbouncer/userlist.txt
         && exec /entrypoint.sh /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+    ports:
+      - { target: 6432, published: 16432, protocol: tcp, mode: ingress }   # PgBouncer desde fuera del Swarm
     networks: [db-net, app-net]
     deploy:
       replicas: 2
