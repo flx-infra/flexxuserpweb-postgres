@@ -20,7 +20,7 @@ bootstrap:
       use_slots: true
       parameters:
         max_connections: 500
-        shared_buffers: 2GB
+        shared_buffers: 1GB
         wal_level: replica
         hot_standby: "on"
         wal_log_hints: "on"

@@ -1,22 +1,21 @@
 # Celda PostgreSQL 18 · Patroni, etcd, HAProxy y PgBouncer
 
-Opción 1 de la pizarra «Despliegue Flexxus Order»: la celda corre dentro del Swarm, en dos workers reservados para bases (worker2 y worker3), con etcd en los tres managers.
+Opción 1 de la pizarra «Despliegue Flexxus Order»: la celda corre dentro del Swarm, en dos workers reservados para bases (worker2 y worker3), con etcd en tres nodos distintos.
 
 ## Qué levanta
 
 | Servicio | Réplicas | Dónde | Para qué |
 |---|---|---|---|
-| etcd1, etcd2, etcd3 | 1 c/u | mngr1, mngr2, mngr3 | Registro de quién es el primario |
+| etcd1, etcd2, etcd3 | 1 c/u | manager01, worker1, worker3 | Registro de quién es el primario |
 | postgres-worker2, postgres-worker3 | 1 c/u | worker2, worker3 | PostgreSQL 18 con Patroni, replicación síncrona |
-| haproxy | 2 | workers `rol=db` | :5000 al primario, :5001 a las réplicas, :7000 estadísticas |
-| pgbouncer | 2 | workers `rol=db` | :6432, modo transacción, `auth_query` |
+| haproxy | 2 | workers, uno por nodo | :5000 al primario, :5001 a las réplicas, :7000 estadísticas |
+| pgbouncer | 2 | workers, uno por nodo | :6432, modo transacción, `auth_query` |
 
 La API de Order se conecta a `pgbouncer:6432` por la red `celda-01-app`.
 
 ## Pasos
 
-1. Etiquetar los workers de base:
-   `docker node update --label-add rol=db worker2` y lo mismo con worker3.
+1. Revisar los nodos: PostgreSQL va fijado por nombre a `PG_NODE_1` y `PG_NODE_2` (worker2 y worker3), etcd a `ETCD_NODE_1..3` (manager01, worker1, worker3). HAProxy y PgBouncer van a cualquier worker, uno por nodo.
 2. Construir y subir la imagen: `docker build -t <registro>/patroni-pg18:1 patroni/` y `docker push`.
 3. Crear los secrets con las contraseñas (Portainer > Secrets, o `docker secret create`): `pg_superuser_password`, `pg_replication_password`, `patroni_api_password`. No se guardan en el repo.
 4. Crear los configs: `./crear-configs.sh` en un manager (o en Portainer > Configs con los mismos nombres).
