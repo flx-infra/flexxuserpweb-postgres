@@ -117,6 +117,9 @@ services:
   haproxy:
     image: haproxy:3.0
     configs: [{ source: haproxy_cfg, target: /usr/local/etc/haproxy/haproxy.cfg }]
+    ports:
+      - { target: 5000, published: 15432, protocol: tcp, mode: ingress }   # primario (lectura y escritura)
+      - { target: 5001, published: 15433, protocol: tcp, mode: ingress }   # réplicas (solo lectura)
     networks: [db-net]
     deploy:
       replicas: 2
