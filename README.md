@@ -23,11 +23,11 @@ La API de Order se conecta a `pgbouncer:6432` por la red `celda-01-app`.
 
 1. Revisar los nodos: PostgreSQL va fijado por nombre a `PG_NODE_1` y `PG_NODE_2` (worker2 y worker3), etcd a `ETCD_NODE_1..3` (manager01, worker1, worker3). HAProxy y PgBouncer van a cualquier worker, uno por nodo.
 2. Construir y subir la imagen: `docker build -t <registro>/patroni-pg18:1 patroni/` y `docker push`.
-3. Crear los secrets con las contraseñas (Portainer > Secrets, o `docker secret create`): `pg_superuser_password`, `pg_replication_password`, `patroni_api_password`. No se guardan en el repo.
+3. Crear los secrets con las contraseñas (Portainer > Secrets, o `docker secret create`): `pg_superuser_password`, `pg_replication_password`, `patroni_api_password`, `pgbouncer_auth_password` y `flexxuserp_api_password`. No se guardan en el repo.
 4. Crear los configs: `./crear-configs.sh` en un manager (o en Portainer > Configs con los mismos nombres).
 5. Desplegar: `docker stack deploy -c docker-compose.yml celda01`. Variables opcionales: `REGISTRO`, `PATRONI_TAG`, `PG_NODE_1`, `PG_NODE_2`, `ETCD_NODE_1..3`.
 6. Ver el estado: `docker exec -it <contenedor pg> patronictl -c /etc/patroni.yml list` debe mostrar un `Leader` y un `Sync Standby`.
-7. Correr `init.sql` en el primario (`psql -h haproxy -p 5000 -U postgres`) y poner el hash SCRAM de `pgbouncer_auth` en `pgbouncer/userlist.txt` (`SELECT passwd FROM pg_shadow WHERE usename='pgbouncer_auth'`). Crear el config `celda01_pgbouncer_userlist_v2` con ese contenido, cambiar el nombre en el compose y redesplegar.
+7. Crear los secrets `pgbouncer_auth_password` y `flexxuserp_api_password` y correr `init.sql` en el primario como indica su encabezado (toma las contraseñas de los secrets). PgBouncer arma su `userlist.txt` solo, desde `pgbouncer_auth_password`.
 8. Probar la caída: detener `postgres-worker2` (o el que sea primario) y confirmar con `patronictl list` que el otro pasa a `Leader` en unos 30 segundos y que PgBouncer sigue respondiendo.
 
 ## Notas
