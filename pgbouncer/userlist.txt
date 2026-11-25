@@ -1,0 +1,1 @@
+"pgbouncer_auth" "CAMBIAR_POR_EL_HASH_SCRAM_DE_pgbouncer_auth"

@@ -1,0 +1,171 @@
+# Celda PostgreSQL 18 con Patroni + etcd + HAProxy + PgBouncer, para Docker Swarm.
+# Despliegue:  ./crear-configs.sh && docker stack deploy -c docker-compose.yml celda01
+# Antes: construir y subir la imagen de Patroni (patroni/Dockerfile), etiquetar los nodos y
+# crear los secrets de Docker con las contraseñas (ver README.md). Este archivo no tiene contraseñas.
+
+x-patroni-env: &patroni-env
+  PATRONI_SCOPE: ${CELDA:-celda-01}
+  PATRONI_ETCD3_HOSTS: "etcd1:2379,etcd2:2379,etcd3:2379"
+  PATRONI_SUPERUSER_USERNAME: postgres
+  PATRONI_SUPERUSER_PASSWORD_FILE: /run/secrets/pg_superuser_password
+  PATRONI_REPLICATION_USERNAME: replicator
+  PATRONI_REPLICATION_PASSWORD_FILE: /run/secrets/pg_replication_password
+  PATRONI_RESTAPI_USERNAME: patroni
+  PATRONI_RESTAPI_PASSWORD_FILE: /run/secrets/patroni_api_password
+
+services:
+  # ---------- etcd: 3 miembros, uno por manager ----------
+  etcd1:
+    image: quay.io/coreos/etcd:v3.5.17
+    command:
+      - etcd
+      - --name=etcd1
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd1:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd1:2380
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=${CELDA:-celda-01}
+    volumes: [etcd1-data:/etcd-data]
+    networks: [db-net]
+    deploy:
+      placement: { constraints: ["node.hostname == ${ETCD_NODE_1:-mngr1}"] }
+      restart_policy: { condition: any }
+
+  etcd2:
+    image: quay.io/coreos/etcd:v3.5.17
+    command:
+      - etcd
+      - --name=etcd2
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd2:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd2:2380
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=${CELDA:-celda-01}
+    volumes: [etcd2-data:/etcd-data]
+    networks: [db-net]
+    deploy:
+      placement: { constraints: ["node.hostname == ${ETCD_NODE_2:-mngr2}"] }
+      restart_policy: { condition: any }
+
+  etcd3:
+    image: quay.io/coreos/etcd:v3.5.17
+    command:
+      - etcd
+      - --name=etcd3
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd3:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd3:2380
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=${CELDA:-celda-01}
+    volumes: [etcd3-data:/etcd-data]
+    networks: [db-net]
+    deploy:
+      placement: { constraints: ["node.hostname == ${ETCD_NODE_3:-mngr3}"] }
+      restart_policy: { condition: any }
+
+  # ---------- PostgreSQL 18: corre dentro de estos servicios ----------
+  # La imagen (patroni/Dockerfile) es postgres:18 con Patroni encima: Patroni arranca PostgreSQL,
+  # lo inicializa, arma la réplica y promueve al otro nodo si cae el primario.
+  postgres-worker2:
+    image: ${REGISTRO:-fabreguesm}/patroni-pg18:${PATRONI_TAG:-1}
+    hostname: postgres-worker2
+    environment:
+      <<: *patroni-env
+      PATRONI_NAME: postgres-worker2
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: postgres-worker2:5432
+      PATRONI_RESTAPI_CONNECT_ADDRESS: postgres-worker2:8008
+    volumes: [pg-data:/var/lib/postgresql/data]
+    configs: [{ source: patroni_yml, target: /etc/patroni.yml }]
+    secrets: [pg_superuser_password, pg_replication_password, patroni_api_password]
+    networks: [db-net]
+    stop_grace_period: 60s
+    deploy:
+      placement:
+        constraints: ["node.hostname == ${PG_NODE_1:-worker2}", "node.labels.rol == db"]
+      restart_policy: { condition: any }
+      resources: { reservations: { memory: 4G } }
+
+  postgres-worker3:
+    image: ${REGISTRO:-fabreguesm}/patroni-pg18:${PATRONI_TAG:-1}
+    hostname: postgres-worker3
+    environment:
+      <<: *patroni-env
+      PATRONI_NAME: postgres-worker3
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: postgres-worker3:5432
+      PATRONI_RESTAPI_CONNECT_ADDRESS: postgres-worker3:8008
+    volumes: [pg-data:/var/lib/postgresql/data]
+    configs: [{ source: patroni_yml, target: /etc/patroni.yml }]
+    secrets: [pg_superuser_password, pg_replication_password, patroni_api_password]
+    networks: [db-net]
+    stop_grace_period: 60s
+    deploy:
+      placement:
+        constraints: ["node.hostname == ${PG_NODE_2:-worker3}", "node.labels.rol == db"]
+      restart_policy: { condition: any }
+      resources: { reservations: { memory: 4G } }
+
+  # ---------- HAProxy: manda al primario que indica Patroni ----------
+  haproxy:
+    image: haproxy:3.0
+    configs: [{ source: haproxy_cfg, target: /usr/local/etc/haproxy/haproxy.cfg }]
+    networks: [db-net]
+    deploy:
+      replicas: 2
+      placement:
+        max_replicas_per_node: 1
+        constraints: ["node.labels.rol == db"]
+      update_config: { parallelism: 1, order: start-first, failure_action: rollback }
+      restart_policy: { condition: any }
+
+  # ---------- PgBouncer: modo transacción, delante de HAProxy ----------
+  pgbouncer:
+    image: edoburu/pgbouncer:${PGBOUNCER_TAG:-latest}   # fijar la versión probada (>= 1.21)
+    configs:
+      - { source: pgbouncer_ini, target: /etc/pgbouncer/pgbouncer.ini }
+      - { source: pgbouncer_userlist, target: /etc/pgbouncer/userlist.txt }
+    networks: [db-net, app-net]
+    deploy:
+      replicas: 2
+      placement:
+        max_replicas_per_node: 1
+        constraints: ["node.labels.rol == db"]
+      update_config: { parallelism: 1, order: start-first, failure_action: rollback }
+      restart_policy: { condition: any }
+
+# Configs creados antes del deploy con crear-configs.sh (o desde Portainer > Configs).
+# Para cambiar uno: crear una versión nueva (celda01_haproxy_cfg_v2) y actualizar el nombre acá.
+configs:
+  patroni_yml: { external: true, name: celda01_patroni_yml_v1 }
+  haproxy_cfg: { external: true, name: celda01_haproxy_cfg_v1 }
+  pgbouncer_ini: { external: true, name: celda01_pgbouncer_ini_v1 }
+  pgbouncer_userlist: { external: true, name: celda01_pgbouncer_userlist_v1 }
+
+# Secrets con las contraseñas: los crea una persona en Portainer > Secrets.
+secrets:
+  pg_superuser_password: { external: true }
+  pg_replication_password: { external: true }
+  patroni_api_password: { external: true }
+
+networks:
+  db-net:            # interna de la celda: etcd, Patroni, HAProxy, PgBouncer
+    driver: overlay
+    attachable: true
+  app-net:           # la usa la API de Order para llegar a PgBouncer (pgbouncer:6432)
+    driver: overlay
+    attachable: true
+    name: ${CELDA:-celda-01}-app
+
+volumes:
+  etcd1-data:
+  etcd2-data:
+  etcd3-data:
+  pg-data:           # volumen local de cada worker de base

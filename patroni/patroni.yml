@@ -1,0 +1,52 @@
+# Configuración común de Patroni. Lo propio de cada nodo (nombre, direcciones, contraseñas)
+# llega por variables PATRONI_* desde el docker-compose.
+restapi:
+  listen: 0.0.0.0:8008
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    # Replicación síncrona: el primario confirma cada transacción cuando la réplica la tiene.
+    synchronous_mode: true
+    # false: si la réplica se cae, el primario sigue escribiendo (sin réplica síncrona) en vez de frenar la venta.
+    synchronous_mode_strict: false
+    # Si etcd se cae, el primario sigue mientras vea a todas sus réplicas.
+    failsafe_mode: true
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        max_connections: 500
+        shared_buffers: 2GB
+        wal_level: replica
+        hot_standby: "on"
+        wal_log_hints: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        synchronous_commit: "on"
+        password_encryption: scram-sha-256
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - local all all trust
+    - host replication replicator 10.0.0.0/8 scram-sha-256
+    - host all all 10.0.0.0/8 scram-sha-256
+
+postgresql:
+  listen: 0.0.0.0:5432
+  data_dir: /var/lib/postgresql/data/pgdata
+  bin_dir: /usr/lib/postgresql/18/bin
+  pgpass: /tmp/pgpass
+  parameters:
+    unix_socket_directories: /var/run/postgresql
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
