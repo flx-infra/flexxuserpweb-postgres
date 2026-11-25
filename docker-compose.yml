@@ -1,11 +1,11 @@
-# Celda PostgreSQL 18 con Patroni + etcd + HAProxy + PgBouncer, para Docker Swarm.
-# Despliegue:  ./crear-configs.sh && docker stack deploy -c docker-compose.yml celda01
-# Antes: construir y subir la imagen de Patroni (patroni/Dockerfile), etiquetar los nodos y
-# crear los secrets de Docker con las contraseñas (ver README.md). Este archivo no tiene contraseñas.
+# Celda PostgreSQL 18 con Patroni + HAProxy + PgBouncer, para Docker Swarm.
+# etcd es compartido entre celdas y vive en su propio stack (flx-infra/etcd-flexxus), en la red externa etcd-net.
+# Antes del deploy: stack etcd-flexxus arriba, imagen de Patroni subida, configs creados (crear-configs.sh)
+# y secrets de Docker con las contraseñas (ver README.md). Este archivo no tiene contraseñas.
 
 x-patroni-env: &patroni-env
   PATRONI_SCOPE: ${CELDA:-celda-01}
-  PATRONI_ETCD3_HOSTS: "etcd1:2379,etcd2:2379,etcd3:2379"
+  PATRONI_ETCD3_HOSTS: "etcd-a:2379,etcd-b:2379,etcd-c:2379"
   PATRONI_SUPERUSER_USERNAME: postgres
   PATRONI_SUPERUSER_PASSWORD_FILE: /run/secrets/pg_superuser_password
   PATRONI_REPLICATION_USERNAME: replicator
@@ -14,64 +14,6 @@ x-patroni-env: &patroni-env
   PATRONI_RESTAPI_PASSWORD_FILE: /run/secrets/patroni_api_password
 
 services:
-  # ---------- etcd: 3 miembros en 3 nodos distintos ----------
-  etcd1:
-    image: quay.io/coreos/etcd:v3.5.17
-    command:
-      - etcd
-      - --name=etcd1
-      - --data-dir=/etcd-data
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --advertise-client-urls=http://etcd1:2379
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --initial-advertise-peer-urls=http://etcd1:2380
-      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
-      - --initial-cluster-state=new
-      - --initial-cluster-token=${CELDA:-celda-01}
-    volumes: [etcd1-data:/etcd-data]
-    networks: [db-net]
-    deploy:
-      placement: { constraints: ["node.hostname == ${ETCD_NODE_1:-manager01}"] }
-      restart_policy: { condition: any }
-
-  etcd2:
-    image: quay.io/coreos/etcd:v3.5.17
-    command:
-      - etcd
-      - --name=etcd2
-      - --data-dir=/etcd-data
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --advertise-client-urls=http://etcd2:2379
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --initial-advertise-peer-urls=http://etcd2:2380
-      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
-      - --initial-cluster-state=new
-      - --initial-cluster-token=${CELDA:-celda-01}
-    volumes: [etcd2-data:/etcd-data]
-    networks: [db-net]
-    deploy:
-      placement: { constraints: ["node.hostname == ${ETCD_NODE_2:-worker1}"] }
-      restart_policy: { condition: any }
-
-  etcd3:
-    image: quay.io/coreos/etcd:v3.5.17
-    command:
-      - etcd
-      - --name=etcd3
-      - --data-dir=/etcd-data
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --advertise-client-urls=http://etcd3:2379
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --initial-advertise-peer-urls=http://etcd3:2380
-      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
-      - --initial-cluster-state=new
-      - --initial-cluster-token=${CELDA:-celda-01}
-    volumes: [etcd3-data:/etcd-data]
-    networks: [db-net]
-    deploy:
-      placement: { constraints: ["node.hostname == ${ETCD_NODE_3:-worker3}"] }
-      restart_policy: { condition: any }
-
   # ---------- PostgreSQL 18: corre dentro de estos servicios ----------
   # La imagen (patroni/Dockerfile) es postgres:18 con Patroni encima: Patroni arranca PostgreSQL,
   # lo inicializa, arma la réplica y promueve al otro nodo si cae el primario.
@@ -86,7 +28,7 @@ services:
     volumes: [pg-data:/var/lib/postgresql/data]
     configs: [{ source: patroni_yml, target: /etc/patroni.yml }]
     secrets: [pg_superuser_password, pg_replication_password, patroni_api_password]
-    networks: [db-net]
+    networks: [db-net, etcd-net]
     stop_grace_period: 60s
     deploy:
       placement:
@@ -105,7 +47,7 @@ services:
     volumes: [pg-data:/var/lib/postgresql/data]
     configs: [{ source: patroni_yml, target: /etc/patroni.yml }]
     secrets: [pg_superuser_password, pg_replication_password, patroni_api_password]
-    networks: [db-net]
+    networks: [db-net, etcd-net]
     stop_grace_period: 60s
     deploy:
       placement:
@@ -159,16 +101,15 @@ secrets:
   patroni_api_password: { external: true }
 
 networks:
-  db-net:            # interna de la celda: etcd, Patroni, HAProxy, PgBouncer
+  db-net:            # interna de la celda: Patroni, HAProxy, PgBouncer
     driver: overlay
     attachable: true
+  etcd-net:          # la crea el stack etcd-flexxus
+    external: true
   app-net:           # la usa la API de Order para llegar a PgBouncer (pgbouncer:6432)
     driver: overlay
     attachable: true
     name: ${CELDA:-celda-01}-app
 
 volumes:
-  etcd1-data:
-  etcd2-data:
-  etcd3-data:
   pg-data:           # volumen local de cada worker de base

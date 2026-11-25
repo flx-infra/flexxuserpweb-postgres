@@ -12,7 +12,7 @@ Opción 1 de la pizarra «Despliegue Flexxus Order»: la celda corre dentro del 
 
 | Servicio | Réplicas | Dónde | Para qué |
 |---|---|---|---|
-| etcd1, etcd2, etcd3 | 1 c/u | manager01, worker1, worker3 | Registro de quién es el primario |
+| (etcd) | — | stack aparte `etcd-flexxus` | Registro de quién es el primario, compartido por todas las celdas |
 | postgres-worker2, postgres-worker3 | 1 c/u | worker2, worker3 | PostgreSQL 18 con Patroni, replicación síncrona |
 | haproxy | 2 | workers, uno por nodo | :5000 al primario, :5001 a las réplicas, :7000 estadísticas |
 | pgbouncer | 2 | workers, uno por nodo | :6432, modo transacción, `auth_query` |
