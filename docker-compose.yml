@@ -27,7 +27,7 @@ services:
       PATRONI_RESTAPI_CONNECT_ADDRESS: postgres-worker2:8008
     volumes: [pg-data:/var/lib/postgresql/data]
     configs: [{ source: patroni_yml, target: /etc/patroni.yml }]
-    secrets: [pg_superuser_password, pg_replication_password, patroni_api_password]
+    secrets: [pg_superuser_password, pg_replication_password, patroni_api_password, pgbouncer_auth_password, flexxuserp_api_password]
     networks: [db-net, etcd-net]
     stop_grace_period: 60s
     deploy:
@@ -46,7 +46,7 @@ services:
       PATRONI_RESTAPI_CONNECT_ADDRESS: postgres-worker3:8008
     volumes: [pg-data:/var/lib/postgresql/data]
     configs: [{ source: patroni_yml, target: /etc/patroni.yml }]
-    secrets: [pg_superuser_password, pg_replication_password, patroni_api_password]
+    secrets: [pg_superuser_password, pg_replication_password, patroni_api_password, pgbouncer_auth_password, flexxuserp_api_password]
     networks: [db-net, etcd-net]
     stop_grace_period: 60s
     deploy:
@@ -76,7 +76,14 @@ services:
     image: edoburu/pgbouncer:${PGBOUNCER_TAG:-latest}   # fijar la versión probada (>= 1.21)
     configs:
       - { source: pgbouncer_ini, target: /etc/pgbouncer/pgbouncer.ini }
-      - { source: pgbouncer_userlist, target: /etc/pgbouncer/userlist.txt }
+    secrets: [pgbouncer_auth_password]
+    # Arma userlist.txt con la contraseña del usuario técnico (secret) y arranca PgBouncer.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        printf '"pgbouncer_auth" "%s"\n' "$$(cat /run/secrets/pgbouncer_auth_password)" > /etc/pgbouncer/userlist.txt
+        && exec /entrypoint.sh /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini
     networks: [db-net, app-net]
     deploy:
       replicas: 2
@@ -92,13 +99,14 @@ configs:
   patroni_yml: { external: true, name: celda01_patroni_yml_v1 }
   haproxy_cfg: { external: true, name: celda01_haproxy_cfg_v1 }
   pgbouncer_ini: { external: true, name: celda01_pgbouncer_ini_v1 }
-  pgbouncer_userlist: { external: true, name: celda01_pgbouncer_userlist_v1 }
 
 # Secrets con las contraseñas: los crea una persona en Portainer > Secrets.
 secrets:
   pg_superuser_password: { external: true }
   pg_replication_password: { external: true }
   patroni_api_password: { external: true }
+  pgbouncer_auth_password: { external: true }   # usuario técnico de PgBouncer (auth_query)
+  flexxuserp_api_password: { external: true }   # usuario flexxuserp_api, el de la API
 
 networks:
   db-net:            # interna de la celda: Patroni, HAProxy, PgBouncer
