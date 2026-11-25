@@ -10,7 +10,7 @@ RUN apt-get update \
 
 ENV PATH="/opt/patroni/bin:${PATH}"
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/patroni-entrypoint.sh
-USER postgres
+# Arranca como root solo para preparar el volumen; el entrypoint pasa a postgres con gosu.
 EXPOSE 5432 8008
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 CMD curl -fs http://localhost:8008/health || exit 1
 ENTRYPOINT ["/usr/local/bin/patroni-entrypoint.sh"]

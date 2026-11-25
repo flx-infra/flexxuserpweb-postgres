@@ -76,7 +76,7 @@ services:
   # La imagen (patroni/Dockerfile) es postgres:18 con Patroni encima: Patroni arranca PostgreSQL,
   # lo inicializa, arma la réplica y promueve al otro nodo si cae el primario.
   postgres-worker2:
-    image: ${REGISTRO:-fabreguesm}/patroni-pg18:${PATRONI_TAG:-1}
+    image: ${REGISTRO:-fabreguesm}/patroni-pg18:${PATRONI_TAG:-2}
     hostname: postgres-worker2
     environment:
       <<: *patroni-env
@@ -95,7 +95,7 @@ services:
       resources: { reservations: { memory: 2G } }
 
   postgres-worker3:
-    image: ${REGISTRO:-fabreguesm}/patroni-pg18:${PATRONI_TAG:-1}
+    image: ${REGISTRO:-fabreguesm}/patroni-pg18:${PATRONI_TAG:-2}
     hostname: postgres-worker3
     environment:
       <<: *patroni-env
