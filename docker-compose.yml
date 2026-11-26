@@ -73,7 +73,7 @@ services:
 
   # ---------- PgBouncer: modo transacción, delante de HAProxy ----------
   pgbouncer:
-    image: edoburu/pgbouncer:${PGBOUNCER_TAG:-latest}   # fijar la versión probada (>= 1.21)
+    image: edoburu/pgbouncer:${PGBOUNCER_TAG:-v1.26.1-p0}   # la versión que corre y se probó
     configs:
       - { source: pgbouncer_ini, target: /etc/pgbouncer/pgbouncer.ini }
     secrets: [pgbouncer_auth_password]
@@ -100,7 +100,7 @@ services:
 configs:
   patroni_yml: { external: true, name: celda01_patroni_yml_v1 }
   haproxy_cfg: { external: true, name: celda01_haproxy_cfg_v1 }
-  pgbouncer_ini: { external: true, name: celda01_pgbouncer_ini_v1 }
+  pgbouncer_ini: { external: true, name: celda01_pgbouncer_ini_v2 }   # v2: pool 10 por base, server_login_retry 2
 
 # Secrets con las contraseñas: los crea una persona en Portainer > Secrets.
 secrets:
