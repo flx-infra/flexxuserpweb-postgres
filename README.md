@@ -35,5 +35,6 @@ La API de Order se conecta a `pgbouncer:6432` por la red `celda-01-app`.
 - La replicación síncrona es de toda la instancia, no de cada base. Por base se ajusta con `synchronous_commit` (ver `init.sql`).
 - `synchronous_mode_strict: false`: si cae la réplica, el primario sigue escribiendo sin esperarla. Con `true` las ventas se frenan hasta que vuelva.
 - Con dos nodos de base no hay segunda réplica para la próxima caída: la réplica asíncrona del segundo sitio se suma después.
-- Fijar las versiones de las imágenes (`PGBOUNCER_TAG`, etcd, haproxy) antes de producción.
+- PgBouncer fijado en v1.26.1-p0. Falta fijar haproxy (hoy `3.0`).
+- `default_pool_size = 10` y `server_login_retry = 2` (config `celda01_pgbouncer_ini_v2`): conexiones al servidor por base y por instancia de PgBouncer; con 3 APIs y 2 PgBouncer, cada cliente usa hasta 20 conexiones al primario. `server_login_retry` baja de ~15 s a ~2 s los errores después de un failover.
 - worker2 hoy corre unos 200 stacks fijados a él. Para reservarlo a bases hay que moverlos antes, o usar otro worker.
